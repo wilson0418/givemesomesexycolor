@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="上傳顏料色卡與目標色表，自動試算出最接近目標色的調色比例，並提供陰影／高光配方建議。">
+<meta name="description" content="上傳顏料色卡與目標色表，自動試算出最接近目標色的調色比例，並提供陰影／高光／對比色配方建議。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
 <title>調色配方助手</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -19,6 +19,7 @@
     --accent:#2A5CAA;
     --accent-ink:#FFFFFF;
     --accent-2:#C85A26;
+    --accent-3:#7A4AC9;
     --good:#2F7A4F;
     --good-bg:#E4F2E8;
     --warn:#9C6B10;
@@ -39,6 +40,7 @@
       --accent:#7CA3E8;
       --accent-ink:#0B1220;
       --accent-2:#EA9A66;
+      --accent-3:#B08CE8;
       --good:#6FC492;
       --good-bg:#1C3327;
       --warn:#E0B563;
@@ -59,6 +61,7 @@
     --accent:#7CA3E8;
     --accent-ink:#0B1220;
     --accent-2:#EA9A66;
+    --accent-3:#B08CE8;
     --good:#6FC492;
     --good-bg:#1C3327;
     --warn:#E0B563;
@@ -223,11 +226,11 @@
   .alt-card{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface);font-size:12.5px;display:flex;flex-direction:column;gap:8px;}
   .alt-head{display:flex;justify-content:space-between;align-items:center;color:var(--ink-soft);}
 
-  .shade-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  @media (max-width:560px){.shade-grid{grid-template-columns:1fr;}}
+  .shade-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
   .shade-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:10px;border-left-width:3px;}
   .shade-card.shadow{border-left-color:var(--accent);}
   .shade-card.highlight{border-left-color:var(--accent-2);}
+  .shade-card.contrast{border-left-color:var(--accent-3);}
   .shade-head{display:flex;align-items:center;gap:10px;}
   .shade-title{font-weight:600;font-size:13.5px;margin-bottom:2px;}
 
@@ -308,7 +311,7 @@
   </div>
 
   <section class="panel panel-wide" id="panel-result">
-    <h2>3. 調色配方 <span class="hint">含陰影色／高光色建議</span></h2>
+    <h2>3. 調色配方 <span class="hint">含陰影／高光／對比色建議</span></h2>
     <div class="result-controls">
       <span>最多混合幾種顏料：</span>
       <select id="maxKSelect">
@@ -590,6 +593,23 @@
     const [L,a,b] = rgbToLab(baseRgb);
     const newLab = [Math.min(96, L+amount), a*0.82, b*0.82 + amount*0.18];
     return labToRgb(newLab);
+  }
+
+  // Contrast color = complementary hue (180° around the Lab a-b plane), with lightness pulled
+  // toward mid-tone and chroma boosted so it stays a usable, visibly different accent color
+  // even when the base color is dark, pale, or nearly neutral.
+  function deriveContrastRgb(baseRgb){
+    const [L,a,b] = rgbToLab(baseRgb);
+    const C = Math.sqrt(a*a+b*b);
+    let h = Math.atan2(b,a)*180/Math.PI;
+    if(h<0) h += 360;
+    const newH = (h+180)%360;
+    const newC = Math.max(C, 38);
+    let newL = L;
+    if(newL<28) newL=38;
+    if(newL>82) newL=62;
+    const hr = newH*Math.PI/180;
+    return labToRgb([newL, newC*Math.cos(hr), newC*Math.sin(hr)]);
   }
 
   // ---------- mixbox ----------
@@ -944,12 +964,15 @@
 
       const shadowRgb = deriveShadowRgb(targetRgb, shadeStrength);
       const highlightRgb = deriveHighlightRgb(targetRgb, shadeStrength);
+      const contrastRgb = deriveContrastRgb(targetRgb);
       const shadowRecipes = findRecipes(paints, shadowRgb, maxK);
       const highlightRecipes = findRecipes(paints, highlightRgb, maxK);
+      const contrastRecipes = findRecipes(paints, contrastRgb, maxK);
 
       renderRecipes(target, recipes, {
         shadow: {hex: rgbToHex(shadowRgb), recipe: shadowRecipes[0]},
-        highlight: {hex: rgbToHex(highlightRgb), recipe: highlightRecipes[0]}
+        highlight: {hex: rgbToHex(highlightRgb), recipe: highlightRecipes[0]},
+        contrast: {hex: rgbToHex(contrastRgb), recipe: contrastRecipes[0]}
       });
     }, 10);
   }
@@ -1022,10 +1045,11 @@
     html += '</div>';
 
     if(shades){
-      html += '<div class="section-label" style="margin-top:6px;">陰影／高光建議（以主色推算，供暗部與邊緣高光使用）</div>';
+      html += '<div class="section-label" style="margin-top:6px;">陰影／高光／對比色建議（以主色推算）</div>';
       html += '<div class="shade-grid">';
       html += shadeCardHtml('shadow', '陰影色', '🌑', shades.shadow.hex, shades.shadow.recipe);
       html += shadeCardHtml('highlight', '高光色', '🔆', shades.highlight.hex, shades.highlight.recipe);
+      html += shadeCardHtml('contrast', '對比色', '🎯', shades.contrast.hex, shades.contrast.recipe);
       html += '</div>';
     }
 
