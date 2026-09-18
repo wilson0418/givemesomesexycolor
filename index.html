@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="上傳顏料色卡與目標色表，自動試算出最接近目標色的調色比例，並提供陰影／高光／對比色配方建議。">
+<meta name="description" content="上傳顏料色卡與目標色表，自動試算出最接近目標色的調色比例，並提供陰影／高光／對比色配方建議，支援僅使用金屬色調製。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
 <title>調色配方助手</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -269,6 +269,9 @@
         <input type="color" id="paintColorInput" value="#cccccc">
         <code class="hexcode" id="paintStageHex">#CCCCCC</code>
         <input type="text" id="paintNameInput" placeholder="顏料名稱，例如 AQ-2 白" style="flex:1;min-width:120px;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap;">
+          <input type="checkbox" id="paintMetallicInput"> ✨ 金屬色
+        </label>
         <button class="primary" id="addPaintBtn">加入顏料庫</button>
       </div>
 
@@ -324,6 +327,9 @@
         <option value="22" selected>中（一般模型上色）</option>
         <option value="30">強（動畫感／高對比）</option>
       </select>
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="metallicOnlyCheckbox"> ✨ 僅使用金屬色調製
+      </label>
       <span id="engineStatus" style="color:var(--ink-soft);"></span>
     </div>
     <div id="resultArea"><div class="empty-note">在上方目標清單點「計算配方」查看結果。</div></div>
@@ -518,13 +524,18 @@
     {name:'MT-29 黑鐵色(履帶)', hex:'#2A2A2A'},
     {name:'MT-30 燒鐵色(280°C)', hex:'#5A3A2A'}
   ];
-  const DEFAULT_PAINTS = AIRBEAST_PAINTS_RAW.map((p,i)=>({id:'ab'+i, name:p.name, hex:p.hex}));
+  const DEFAULT_PAINTS = AIRBEAST_PAINTS_RAW.map((p,i)=>({id:'ab'+i, name:p.name, hex:p.hex, metallic:/^MT-/.test(p.name)}));
   const DEMO_TARGETS = [
     {id:'t0', hex:'#7A8B4F', label:'範例：軍綠色目標'}
   ];
 
   let paints = loadJSON('paintmix_paints_v2', null);
   if(!paints){ paints = DEFAULT_PAINTS.map(p=>({...p})); }
+  else{
+    // Paints saved before the metallic flag existed won't have it set; infer it from the AQ/MT naming so
+    // the "僅使用金屬色調製" filter still works for libraries people already built before this feature shipped.
+    paints.forEach(p=>{ if(p.metallic===undefined) p.metallic = /^MT-/.test(p.name); });
+  }
 
   let targets = loadJSON('paintmix_targets_v1', null);
   let targetsAreDemo = false;
@@ -752,6 +763,7 @@
   const paintColorInput = document.getElementById('paintColorInput');
   const paintNameInput = document.getElementById('paintNameInput');
   const addPaintBtn = document.getElementById('addPaintBtn');
+  const paintMetallicInput = document.getElementById('paintMetallicInput');
   const paintList = document.getElementById('paintList');
   const paintCount = document.getElementById('paintCount');
   const paintEmptyNote = document.getElementById('paintEmptyNote');
@@ -804,8 +816,9 @@
   addPaintBtn.addEventListener('click', function(){
     const name = paintNameInput.value.trim();
     if(!name){ paintNameInput.focus(); return; }
-    paints.push({id:'p'+Date.now()+Math.random().toString(16).slice(2), name, hex: stagedPaintHex});
+    paints.push({id:'p'+Date.now()+Math.random().toString(16).slice(2), name, hex: stagedPaintHex, metallic: paintMetallicInput.checked});
     paintNameInput.value = '';
+    paintMetallicInput.checked = false;
     persistAndRenderPaints();
   });
   clearDemoPaintsBtn.addEventListener('click', function(){
@@ -827,6 +840,7 @@
       row.innerHTML =
         '<div class="swatch" style="background:'+p.hex+'"></div>'+
         '<span class="name">'+escapeHtml(p.name)+'</span>'+
+        (p.metallic ? '<span class="demo-tag" title="金屬色" style="color:var(--accent-3);">✨ 金屬</span>' : '') +
         '<code class="hexcode">'+p.hex+'</code>'+
         '<button class="ghost" data-id="'+p.id+'" title="刪除">✕</button>';
       row.querySelector('button').addEventListener('click', function(){
@@ -928,6 +942,7 @@
   const resultArea = document.getElementById('resultArea');
   const maxKSelect = document.getElementById('maxKSelect');
   const shadeStrengthSelect = document.getElementById('shadeStrengthSelect');
+  const metallicOnlyCheckbox = document.getElementById('metallicOnlyCheckbox');
   let shadeStrength = parseInt(shadeStrengthSelect.value,10);
   maxKSelect.addEventListener('change', function(){
     maxK = parseInt(maxKSelect.value,10);
@@ -935,6 +950,9 @@
   });
   shadeStrengthSelect.addEventListener('change', function(){
     shadeStrength = parseInt(shadeStrengthSelect.value,10);
+    if(activeTargetId){ const t=targets.find(x=>x.id===activeTargetId); if(t) computeAndShow(t); }
+  });
+  metallicOnlyCheckbox.addEventListener('change', function(){
     if(activeTargetId){ const t=targets.find(x=>x.id===activeTargetId); if(t) computeAndShow(t); }
   });
 
@@ -957,17 +975,23 @@
       resultArea.innerHTML = '<div class="empty-note">請先在「顏料庫」加入至少一種顏料。</div>';
       return;
     }
+    const metallicOnly = metallicOnlyCheckbox.checked;
+    const pool = metallicOnly ? paints.filter(p=>p.metallic) : paints;
+    if(metallicOnly && pool.length===0){
+      resultArea.innerHTML = '<div class="empty-note">顏料庫裡沒有標示「✨ 金屬色」的顏料。請在顏料庫新增顏料時勾選「✨ 金屬色」，或取消「僅使用金屬色調製」。</div>';
+      return;
+    }
     resultArea.innerHTML = '<div class="empty-note">計算中…</div>';
     setTimeout(function(){
       const targetRgb = hexToRgb(target.hex);
-      const recipes = findRecipes(paints, targetRgb, maxK);
+      const recipes = findRecipes(pool, targetRgb, maxK);
 
       const shadowRgb = deriveShadowRgb(targetRgb, shadeStrength);
       const highlightRgb = deriveHighlightRgb(targetRgb, shadeStrength);
       const contrastRgb = deriveContrastRgb(targetRgb);
-      const shadowRecipes = findRecipes(paints, shadowRgb, maxK);
-      const highlightRecipes = findRecipes(paints, highlightRgb, maxK);
-      const contrastRecipes = findRecipes(paints, contrastRgb, maxK);
+      const shadowRecipes = findRecipes(pool, shadowRgb, maxK);
+      const highlightRecipes = findRecipes(pool, highlightRgb, maxK);
+      const contrastRecipes = findRecipes(pool, contrastRgb, maxK);
 
       renderRecipes(target, recipes, {
         shadow: {hex: rgbToHex(shadowRgb), recipe: shadowRecipes[0]},
