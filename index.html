@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="上傳顏料色卡與目標色表，自動試算出最接近目標色的調色比例，並提供陰影／高光配方建議。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<title>調色配方助手</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/mixbox@2.0.0/mixbox.js"></script>
+<style>
+  :root{
+    --bg:#EEF0EC;
+    --surface:#FFFFFF;
+    --surface-2:#F5F6F1;
+    --border:#DADDD3;
+    --ink:#1C1E1A;
+    --ink-soft:#5B6154;
+    --accent:#2A5CAA;
+    --accent-ink:#FFFFFF;
+    --accent-2:#C85A26;
+    --good:#2F7A4F;
+    --good-bg:#E4F2E8;
+    --warn:#9C6B10;
+    --warn-bg:#FBF0DA;
+    --bad:#AE3A34;
+    --bad-bg:#FAE6E4;
+    --shadow:rgba(28,30,26,0.08);
+    --demo-tag:#8A6D3B;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#15171A;
+      --surface:#1D2023;
+      --surface-2:#24272A;
+      --border:#34383B;
+      --ink:#EDEFEA;
+      --ink-soft:#A6ACA0;
+      --accent:#7CA3E8;
+      --accent-ink:#0B1220;
+      --accent-2:#EA9A66;
+      --good:#6FC492;
+      --good-bg:#1C3327;
+      --warn:#E0B563;
+      --warn-bg:#3A2F17;
+      --bad:#E68B85;
+      --bad-bg:#3A2220;
+      --shadow:rgba(0,0,0,0.45);
+      --demo-tag:#D9B77C;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#15171A;
+    --surface:#1D2023;
+    --surface-2:#24272A;
+    --border:#34383B;
+    --ink:#EDEFEA;
+    --ink-soft:#A6ACA0;
+    --accent:#7CA3E8;
+    --accent-ink:#0B1220;
+    --accent-2:#EA9A66;
+    --good:#6FC492;
+    --good-bg:#1C3327;
+    --warn:#E0B563;
+    --warn-bg:#3A2F17;
+    --bad:#E68B85;
+    --bad-bg:#3A2220;
+    --shadow:rgba(0,0,0,0.45);
+    --demo-tag:#D9B77C;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans',system-ui,-apple-system,'Noto Sans TC',sans-serif;
+    padding:24px 16px 48px;
+    display:flex;
+    justify-content:center;
+  }
+  .wrap{width:100%;max-width:1120px;display:flex;flex-direction:column;gap:20px;}
+
+  .page-head{display:flex;align-items:flex-start;gap:14px;padding:4px 2px 4px;}
+  .brand-mark{font-size:34px;line-height:1;}
+  h1{
+    font-family:'Archivo',sans-serif;
+    font-weight:800;
+    font-size:26px;
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .sub{margin:0;color:var(--ink-soft);font-size:14px;}
+
+  .layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media (max-width:780px){.layout{grid-template-columns:1fr;}}
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:20px;
+    box-shadow:0 1px 3px var(--shadow);
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .panel h2{
+    font-family:'Archivo',sans-serif;
+    font-size:16px;
+    font-weight:700;
+    margin:0;
+    display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  }
+  .panel h2 .hint{font-family:'IBM Plex Sans',sans-serif;font-weight:400;font-size:12.5px;color:var(--ink-soft);}
+
+  .dropzone{
+    border:1.5px dashed var(--border);
+    border-radius:12px;
+    padding:14px;
+    text-align:center;
+    font-size:13px;
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition:border-color .15s,background .15s;
+  }
+  .dropzone:hover{border-color:var(--accent);background:var(--surface-2);}
+  .dropzone input{display:none;}
+
+  .canvas-wrap{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+  canvas{display:block;width:100%;height:auto;cursor:crosshair;background:var(--surface-2);}
+
+  .picker-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;}
+  .swatch{
+    width:30px;height:30px;border-radius:8px;border:1px solid var(--border);flex:none;
+    box-shadow:inset 0 0 0 2px var(--surface);
+  }
+  .swatch.lg{width:56px;height:56px;border-radius:12px;}
+  code.hexcode{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-soft);}
+
+  input[type="text"], select{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:13px;
+    padding:7px 10px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--ink);
+  }
+  input[type="text"]:focus-visible, select:focus-visible, button:focus-visible, .dropzone:focus-visible{
+    outline:2px solid var(--accent);outline-offset:1px;
+  }
+  input[type="color"]{width:34px;height:34px;padding:0;border:1px solid var(--border);border-radius:8px;background:none;cursor:pointer;}
+
+  button{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:13px;font-weight:600;
+    padding:8px 14px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    color:var(--ink);
+    cursor:pointer;
+    transition:background .15s,border-color .15s;
+  }
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
+  button.primary:hover{filter:brightness(1.06);}
+  button.ghost{background:transparent;border-color:transparent;color:var(--ink-soft);padding:6px 8px;}
+  button.ghost:hover{color:var(--bad);}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+
+  .stage-box{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  }
+
+  .list{display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto;padding-right:2px;}
+  .row-item{
+    display:flex;align-items:center;gap:10px;
+    padding:7px 9px;border-radius:9px;background:var(--surface-2);border:1px solid transparent;
+    font-size:13px;
+  }
+  .row-item.active{border-color:var(--accent);}
+  .row-item .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row-item input[type="text"].label-input{flex:1;min-width:0;background:transparent;border-color:transparent;padding:4px 6px;}
+  .row-item input[type="text"].label-input:hover{border-color:var(--border);}
+  .demo-tag{
+    font-size:10.5px;font-weight:600;color:var(--demo-tag);
+    border:1px solid currentColor;border-radius:5px;padding:1px 5px;flex:none;
+  }
+
+  .empty-note{font-size:12.5px;color:var(--ink-soft);padding:6px 2px;}
+
+  .panel-wide{grid-column:1/-1;}
+  .result-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink-soft);}
+
+  .result-card{
+    display:flex;flex-direction:column;gap:16px;
+    border:1px solid var(--border);border-radius:14px;padding:18px;background:var(--surface-2);
+  }
+  .result-top{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+  .versus{display:flex;align-items:center;gap:12px;}
+  .versus .arrow{color:var(--ink-soft);font-size:20px;}
+  .versus figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .versus figcaption{font-size:11.5px;color:var(--ink-soft);}
+
+  .de-badge{
+    font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:13px;
+    padding:6px 12px;border-radius:999px;display:flex;flex-direction:column;line-height:1.3;align-items:center;
+  }
+  .de-badge small{font-family:'IBM Plex Sans',sans-serif;font-weight:500;font-size:11px;}
+  .de-good{background:var(--good-bg);color:var(--good);}
+  .de-warn{background:var(--warn-bg);color:var(--warn);}
+  .de-bad{background:var(--bad-bg);color:var(--bad);}
+
+  .bar{display:flex;height:22px;border-radius:6px;overflow:hidden;border:1px solid var(--border);}
+  .bar > span{height:100%;}
+
+  .ingredient{display:flex;align-items:center;gap:10px;font-size:13.5px;}
+  .ingredient .dot{width:14px;height:14px;border-radius:4px;flex:none;border:1px solid var(--border);}
+  .ingredient .pct{font-family:'IBM Plex Mono',monospace;font-weight:600;margin-left:auto;}
+
+  .alt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:560px){.alt-grid{grid-template-columns:1fr;}}
+  .alt-card{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface);font-size:12.5px;display:flex;flex-direction:column;gap:8px;}
+  .alt-head{display:flex;justify-content:space-between;align-items:center;color:var(--ink-soft);}
+
+  .shade-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:560px){.shade-grid{grid-template-columns:1fr;}}
+  .shade-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:10px;border-left-width:3px;}
+  .shade-card.shadow{border-left-color:var(--accent);}
+  .shade-card.highlight{border-left-color:var(--accent-2);}
+  .shade-head{display:flex;align-items:center;gap:10px;}
+  .shade-title{font-weight:600;font-size:13.5px;margin-bottom:2px;}
+
+  footer.note{
+    font-size:12px;color:var(--ink-soft);line-height:1.6;
+    border-top:1px solid var(--border);padding-top:14px;
+  }
+
+  .section-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="page-head">
+    <div class="brand-mark">🎨</div>
+    <div>
+      <h1>調色配方助手</h1>
+      <p class="sub">建立你的顏料庫，再從色表照片吸取目標色，工具會試算最接近的調色比例</p>
+    </div>
+  </div>
+
+  <div class="layout">
+    <section class="panel" id="panel-paints">
+      <h2>1. 顏料庫 <span class="hint">你手邊實際擁有的顏料</span></h2>
+
+      <label class="dropzone" tabindex="0">
+        <input type="file" accept="image/*" id="paintImgInput">
+        📷 上傳顏料色卡 / 色票照片（可用拍照的色卡，點圖吸色）
+      </label>
+      <div class="canvas-wrap" id="paintCanvasWrap" hidden>
+        <canvas id="paintCanvas"></canvas>
+      </div>
+
+      <div class="stage-box">
+        <div class="swatch" id="paintStageSwatch" style="background:#CCCCCC"></div>
+        <input type="color" id="paintColorInput" value="#cccccc">
+        <code class="hexcode" id="paintStageHex">#CCCCCC</code>
+        <input type="text" id="paintNameInput" placeholder="顏料名稱，例如 AQ-2 白" style="flex:1;min-width:120px;">
+        <button class="primary" id="addPaintBtn">加入顏料庫</button>
+      </div>
+
+      <div class="section-label">已加入（<span id="paintCount">0</span>）</div>
+      <div class="list" id="paintList"></div>
+      <div class="empty-note" id="paintEmptyNote" hidden>目前沒有顏料，請上傳色卡照片點選顏色，或直接用色票新增。</div>
+      <button class="ghost" id="clearDemoPaintsBtn" style="align-self:flex-start;" hidden>✕ 清空顏料庫，重新開始</button>
+    </section>
+
+    <section class="panel" id="panel-targets">
+      <h2>2. 目標色表 <span class="hint">想要調出來的顏色</span></h2>
+
+      <label class="dropzone" tabindex="0">
+        <input type="file" accept="image/*" id="targetImgInput">
+        📷 上傳色表 / 參考圖照片（點圖吸取目標色）
+      </label>
+      <div class="canvas-wrap" id="targetCanvasWrap" hidden>
+        <canvas id="targetCanvas"></canvas>
+      </div>
+
+      <div class="stage-box">
+        <span class="section-label" style="margin:0;">游標色</span>
+        <div class="swatch" id="hoverSwatch" style="background:#CCCCCC"></div>
+        <code class="hexcode" id="hoverHex">—</code>
+        <span style="color:var(--ink-soft);font-size:12px;">點一下圖片即可加入下方清單</span>
+      </div>
+
+      <div class="picker-row">
+        <span class="section-label" style="margin:0;">或手動輸入色碼</span>
+        <input type="color" id="targetColorInput" value="#7a8b4f">
+        <input type="text" id="targetHexInput" value="#7A8B4F" style="width:90px;">
+        <button id="addTargetHexBtn">加入</button>
+      </div>
+
+      <div class="section-label">目標清單（<span id="targetCount">0</span>）</div>
+      <div class="list" id="targetList"></div>
+      <div class="empty-note" id="targetEmptyNote" hidden>目前沒有目標色，請上傳色表照片並點選顏色。</div>
+      <button class="ghost" id="clearDemoTargetsBtn" style="align-self:flex-start;" hidden>✕ 清除範例目標色</button>
+    </section>
+  </div>
+
+  <section class="panel panel-wide" id="panel-result">
+    <h2>3. 調色配方 <span class="hint">含陰影色／高光色建議</span></h2>
+    <div class="result-controls">
+      <span>最多混合幾種顏料：</span>
+      <select id="maxKSelect">
+        <option value="2">2 種（好調、適合滴管）</option>
+        <option value="3">3 種（更精準、較難調）</option>
+      </select>
+      <span>陰影／高光強度：</span>
+      <select id="shadeStrengthSelect">
+        <option value="14">輕（自然漸層）</option>
+        <option value="22" selected>中（一般模型上色）</option>
+        <option value="30">強（動畫感／高對比）</option>
+      </select>
+      <span id="engineStatus" style="color:var(--ink-soft);"></span>
+    </div>
+    <div id="resultArea"><div class="empty-note">在上方目標清單點「計算配方」查看結果。</div></div>
+  </section>
+
+  <footer class="note">
+    ⚠️ 配方是以 Kubelka–Munk 顏料混色模型（mixbox）試算的近似值，僅供起始比例參考。實際成果會受顏料濃度、稀釋比例、噴塗厚度、底漆與乾燥後變色影響，建議先在廢料或測試片上調色比對，再微調上色。顏色皆以螢幕顯示色為準，與實體顏料仍可能有色差。
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- storage ----------
+  function loadJSON(key, fallback){
+    try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+    catch(e){ return fallback; }
+  }
+  function saveJSON(key, val){
+    try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+  }
+
+  const AIRBEAST_PAINTS_RAW = [
+    // 基本色
+    {name:'AQ-01 黑色', hex:'#1A1A1A'},
+    {name:'AQ-02 白色', hex:'#F2F2EF'},
+    {name:'AQ-03 青色', hex:'#29ABE2'},
+    {name:'AQ-04 洋紅色', hex:'#E0157A'},
+    {name:'AQ-05 黃色', hex:'#F2DE00'},
+    {name:'AQ-06 紅色', hex:'#D91F26'},
+    {name:'AQ-07 橙色', hex:'#E8791E'},
+    {name:'AQ-08 黃橙色', hex:'#F2A71B'},
+    {name:'AQ-09 檸檬黃', hex:'#F0E14A'},
+    {name:'AQ-10 黃綠色', hex:'#8BC34A'},
+    {name:'AQ-11 綠色', hex:'#1F6E42'},
+    {name:'AQ-12 天藍色', hex:'#2D7FD1'},
+    {name:'AQ-13 藍色', hex:'#21358A'},
+    {name:'AQ-14 靛藍色', hex:'#1B2A5E'},
+    {name:'AQ-15 紫色', hex:'#4B3277'},
+    {name:'AQ-16 棕色', hex:'#5B3A2A'},
+    {name:'AQ-17 黃褐色', hex:'#7A5230'},
+    {name:'AQ-18 灰色', hex:'#8C8C8C'},
+    // 軍用色
+    {name:'AQ-22 德國灰', hex:'#4A4E52'},
+    {name:'AQ-23 暗黃色', hex:'#9C8A5A'},
+    {name:'AQ-24 RLM02灰', hex:'#6D6B57'},
+    {name:'AQ-25 北約綠', hex:'#3F4D2A'},
+    {name:'AQ-26 北約棕', hex:'#6B4423'},
+    {name:'AQ-27 北約黑', hex:'#2A2622'},
+    {name:'AQ-28 美機體內部', hex:'#4B5D3A'},
+    {name:'AQ-29 美機體內部', hex:'#3C4A2E'},
+    {name:'AQ-30 深綠色', hex:'#1F3A22'},
+    {name:'AQ-31 亮膚色', hex:'#E8B48C'},
+    {name:'AQ-32 基本膚色', hex:'#D9A276'},
+    {name:'AQ-33 桃膚色', hex:'#E8A98A'},
+    {name:'AQ-34 自然膚色', hex:'#C98A63'},
+    {name:'AQ-35 小麥膚色', hex:'#B97D53'},
+    {name:'AQ-36 可可亞', hex:'#7A4B32'},
+    {name:'AQ-37 咖啡色', hex:'#4A2E1E'},
+    {name:'AQ-38 哈密瓜', hex:'#E8A66A'},
+    {name:'AQ-39 粉橙色', hex:'#E8836A'},
+    {name:'AQ-40 曼迪紅', hex:'#D9636B'},
+    {name:'AQ-41 巧克力', hex:'#3E2417'},
+    {name:'AQ-42 焦色琥珀', hex:'#7A3E1D'},
+    {name:'AQ-43 透明洋紅', hex:'#E0157A'},
+    {name:'AQ-44 透明黃', hex:'#F2E94E'},
+    {name:'AQ-45 透明青', hex:'#29ABE2'},
+    {name:'AQ-46 透明紅', hex:'#D91F26'},
+    {name:'AQ-47 透明橙', hex:'#E8791E'},
+    {name:'AQ-48 透明綠', hex:'#4CAF50'},
+    {name:'AQ-49 透明紫', hex:'#8E6BAF'},
+    {name:'AQ-50 亮光煙燻色', hex:'#4A4A4A'},
+    {name:'AQ-51 消光煙燻色', hex:'#4A4A4A'},
+    {name:'AQ-52 暗銹色', hex:'#5A3222'},
+    {name:'AQ-53 紅銹色', hex:'#7A2E1E'},
+    {name:'AQ-54 標準銹色', hex:'#8B4226'},
+    {name:'AQ-55 亮銹色', hex:'#A85A32'},
+    // G套組（鋼彈吉翁系）
+    {name:'AQ-56 珊瑚粉橘', hex:'#E8836A'},
+    {name:'AQ-57 淺粉紅', hex:'#F0B8C0'},
+    {name:'AQ-58 濃烈蜜桃色', hex:'#E8697A'},
+    {name:'AQ-59 艷紅色', hex:'#D91F2E'},
+    {name:'AQ-60 酒紅色', hex:'#7A1F2E'},
+    {name:'AQ-61 暗海綠', hex:'#1F4A3E'},
+    {name:'AQ-62 湖綠色', hex:'#3FA88A'},
+    {name:'AQ-63 墨綠色', hex:'#1F3A2E'},
+    {name:'AQ-64 夜藍灰', hex:'#3A4A5E'},
+    {name:'AQ-65 普魯士藍黑', hex:'#1F2B33'},
+    {name:'AQ-66 海藍色', hex:'#1F5A8A'},
+    {name:'AQ-67 水藍色', hex:'#6BB8D9'},
+    {name:'AQ-68 長春花色', hex:'#6B7FCC'},
+    {name:'AQ-69 淺鳶尾色', hex:'#8A7AB8'},
+    {name:'AQ-70 藍莓色', hex:'#4A3A7A'},
+    {name:'AQ-71 冷白色', hex:'#E8ECEC'},
+    {name:'AQ-72 沙黃色', hex:'#C9A85A'},
+    {name:'AQ-73 卡其色', hex:'#8A7A4A'},
+    {name:'AQ-74 奶茶色', hex:'#B8926A'},
+    {name:'AQ-75 深棕土色', hex:'#6B4226'},
+    {name:'AQ-76 暖灰色', hex:'#8A8478'},
+    {name:'AQ-77 白灰色', hex:'#D9D6CC'},
+    {name:'AQ-78 火橙色', hex:'#D9432E'},
+    {name:'AQ-79 薔薇粉紅', hex:'#D95A7A'},
+    {name:'AQ-80 羽扇豆色', hex:'#9A7AB8'},
+    {name:'AQ-81 丁香紫', hex:'#8A6BAF'},
+    {name:'AQ-82 紫藤灰', hex:'#8A85A0'},
+    {name:'AQ-83 群青藍', hex:'#2A3F8A'},
+    {name:'AQ-84 深海綠', hex:'#1F4A3A'},
+    {name:'AQ-85 獵人綠', hex:'#1F3A28'},
+    // 空軍FS灰色系
+    {name:'AQ-86 中型砲艇灰 (FS36118)', hex:'#6A6E70'},
+    {name:'AQ-87 USAF中灰色 (FS36270)', hex:'#797D7C'},
+    {name:'AQ-88 深幽靈灰 (FS36320)', hex:'#7C8177'},
+    {name:'AQ-89 USN淺灰色 (FS36375)', hex:'#A6ABA4'},
+    {name:'AQ-90 USAAF淺灰色 (FS36622)', hex:'#9C9FA0'},
+    {name:'AQ-91 美國海軍標準色 (FS36440)', hex:'#888D8F'},
+    {name:'AQ-92 中灰色 (FS35237)', hex:'#56708A'},
+    {name:'AQ-93 USAF淺灰色 (FS6495)', hex:'#ACA890'},
+    {name:'AQ-94 鴨蛋藍 (FS35622)', hex:'#5C7C8C'},
+    {name:'AQ-95 Tamiya暗幽靈灰 (FS36320)', hex:'#767C6E'},
+    {name:'AQ-96 Tamiya淺幽靈灰 (FS36375)', hex:'#A3A89E'},
+    {name:'AQ-97 ModelCasten白幽靈灰 (FS36375)', hex:'#B8BBB2'},
+    {name:'AQ-98 天藍灰 (FS35550)', hex:'#4C7EA0'},
+    {name:'AQ-99 深海鷗灰 (FS36231)', hex:'#4B4C4C'},
+    {name:'AQ-100 徽章色 (FS37875)', hex:'#EDEDE8'},
+    // 日軍飛機色
+    {name:'AQ-101 暗綠色1(中島廠)', hex:'#2E4A2E'},
+    {name:'AQ-102 暗綠色2(三菱廠)', hex:'#23392A'},
+    {name:'AQ-103 黑墨綠色', hex:'#1C2A20'},
+    {name:'AQ-104 日本陸軍濃綠色', hex:'#33472C'},
+    {name:'AQ-105 駕駛艙內部(草黃綠,中島廠)', hex:'#8A8A4A'},
+    {name:'AQ-106 駕駛艙內部(舊化,高光用)', hex:'#A89A6A'},
+    {name:'AQ-107 駕駛艙內部(淡綠色,三菱廠)', hex:'#7A8A5E'},
+    {name:'AQ-108 海軍灰#1(明灰白,三菱廠)', hex:'#C9C6BA'},
+    {name:'AQ-109 海軍淺灰#2(明灰白,帶藍相)', hex:'#B9C0C2'},
+    {name:'AQ-110 海軍灰#3(飴色,中島廠)', hex:'#A89468'},
+    {name:'AQ-111 螺旋槳專用紅棕色', hex:'#6B3A28'},
+    {name:'AQ-112 日本飛機整流罩藍黑(帶藍相)', hex:'#1A2430'},
+    // 墨線舊化液
+    {name:'WT-01 黑色舊化', hex:'#1C1C1C'},
+    {name:'WT-02 白色舊化', hex:'#E8E6DE'},
+    {name:'WT-03 青色舊化', hex:'#3A7A9A'},
+    {name:'WT-04 洋紅舊化', hex:'#C23A7A'},
+    {name:'WT-05 黃舊化', hex:'#C9A83A'},
+    {name:'WT-06 暗褐色', hex:'#4A3222'},
+    {name:'WT-07 暗銹色', hex:'#5A2E1E'},
+    {name:'WT-08 標準銹色', hex:'#8B4226'},
+    {name:'WT-09 亮銹色', hex:'#A85A32'},
+    {name:'WT-10 暗綠色', hex:'#2A3A28'},
+    {name:'WT-11 陰影藍', hex:'#2A3A5A'},
+    {name:'WT-12 沙漠塵埃', hex:'#B8A06A'},
+    {name:'WT-13 歐洲塵埃', hex:'#8A7A5A'},
+    {name:'WT-14 濾鏡紫', hex:'#5A3A6A'},
+    {name:'WT-15 灰藍色', hex:'#5A6A7A'},
+    {name:'WT-16 焦油色', hex:'#2A2018'},
+    {name:'WT-17 灰色舊化', hex:'#6A6A62'},
+    // 螢光色
+    {name:'FL-01 螢光黃', hex:'#E8F23A'},
+    {name:'FL-02 螢光綠', hex:'#3AF23A'},
+    {name:'FL-03 螢光橙', hex:'#F27A1A'},
+    {name:'FL-04 螢光紅', hex:'#F23A2A'},
+    {name:'FL-05 螢光粉紅', hex:'#F23A9A'},
+    {name:'FL-06 螢光藍', hex:'#2A5AF2'},
+    // 金屬色
+    {name:'MT-01 銀色', hex:'#B8BAB8'},
+    {name:'MT-02 白鋁色', hex:'#C9CBC7'},
+    {name:'MT-03 鋁色', hex:'#B0B2AE'},
+    {name:'MT-04 槍鐵色', hex:'#4A4C4E'},
+    {name:'MT-05 銅色', hex:'#B5651D'},
+    {name:'MT-06 金色', hex:'#C9A227'},
+    {name:'MT-07 青金色', hex:'#A88A2A'},
+    {name:'MT-08 銅色', hex:'#B5651D'},
+    {name:'MT-09 青竹色', hex:'#4A9A8A'},
+    {name:'MT-10 古銅色', hex:'#8A5A2A'},
+    {name:'MT-11 金屬藍', hex:'#2A5A9A'},
+    {name:'MT-12 松石綠', hex:'#2A9A7A'},
+    {name:'MT-13 金龜綠', hex:'#3A7A4A'},
+    {name:'MT-14 金屬天藍', hex:'#4A8ACA'},
+    {name:'MT-15 金屬紫羅蘭', hex:'#7A4A9A'},
+    {name:'MT-16 金屬洋紅', hex:'#9A2A6A'},
+    {name:'MT-17 亞麻金', hex:'#B8A05A'},
+    {name:'MT-18 純金色', hex:'#D4AF37'},
+    {name:'MT-19 暖金色', hex:'#C9962A'},
+    {name:'MT-20 紅銅色', hex:'#B5652A'},
+    {name:'MT-21 鈦金色', hex:'#8A8A7A'},
+    {name:'MT-22 玫瑰金', hex:'#C98A7A'},
+    {name:'MT-23 排氣歧管色', hex:'#5A4A3A'},
+    {name:'MT-25 回火鋼色(388°C)', hex:'#4A5A6A'},
+    {name:'MT-26 噴氣尾管1', hex:'#6A5A4A'},
+    {name:'MT-27 噴氣尾管2', hex:'#7A6A5A'},
+    {name:'MT-28 香檳銀色', hex:'#C9C0A8'},
+    {name:'MT-29 黑鐵色(履帶)', hex:'#2A2A2A'},
+    {name:'MT-30 燒鐵色(280°C)', hex:'#5A3A2A'}
+  ];
+  const DEFAULT_PAINTS = AIRBEAST_PAINTS_RAW.map((p,i)=>({id:'ab'+i, name:p.name, hex:p.hex}));
+  const DEMO_TARGETS = [
+    {id:'t0', hex:'#7A8B4F', label:'範例：軍綠色目標'}
+  ];
+
+  let paints = loadJSON('paintmix_paints_v2', null);
+  if(!paints){ paints = DEFAULT_PAINTS.map(p=>({...p})); }
+
+  let targets = loadJSON('paintmix_targets_v1', null);
+  let targetsAreDemo = false;
+  if(!targets){ targets = DEMO_TARGETS.map(t=>({...t})); targetsAreDemo = true; }
+
+  let activeTargetId = null;
+  let maxK = 2;
+
+  // ---------- color math ----------
+  function hexToRgb(hex){
+    hex = hex.replace('#','').trim();
+    if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+    const num = parseInt(hex,16);
+    return [(num>>16)&255,(num>>8)&255,num&255];
+  }
+  function rgbToHex(rgb){
+    return '#'+rgb.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('').toUpperCase();
+  }
+  function rgbCss(rgb){ return 'rgb('+rgb[0]+', '+rgb[1]+', '+rgb[2]+')'; }
+
+  function srgbToLinear(c){ c/=255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); }
+  function rgbToXyz(rgb){
+    const r=srgbToLinear(rgb[0]), g=srgbToLinear(rgb[1]), b=srgbToLinear(rgb[2]);
+    return [
+      (r*0.4124564+g*0.3575761+b*0.1804375)*100,
+      (r*0.2126729+g*0.7151522+b*0.0721750)*100,
+      (r*0.0193339+g*0.1191920+b*0.9503041)*100
+    ];
+  }
+  function xyzToLab(xyz){
+    const refX=95.047, refY=100.0, refZ=108.883;
+    const xr=xyz[0]/refX, yr=xyz[1]/refY, zr=xyz[2]/refZ;
+    const f = t => t>0.008856 ? Math.cbrt(t) : (7.787*t+16/116);
+    const fx=f(xr), fy=f(yr), fz=f(zr);
+    return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+  }
+  function rgbToLab(rgb){ return xyzToLab(rgbToXyz(rgb)); }
+  function deltaE(lab1, lab2){
+    const dl=lab1[0]-lab2[0], da=lab1[1]-lab2[1], db=lab1[2]-lab2[2];
+    return Math.sqrt(dl*dl+da*da+db*db);
+  }
+  function labToXyz(lab){
+    const refX=95.047, refY=100.0, refZ=108.883;
+    const fy=(lab[0]+16)/116, fx=fy+lab[1]/500, fz=fy-lab[2]/200;
+    const finv = t => { const t3=t*t*t; return t3>0.008856 ? t3 : (t-16/116)/7.787; };
+    return [finv(fx)*refX, finv(fy)*refY, finv(fz)*refZ];
+  }
+  function linearToSrgb(c){ return c<=0.0031308 ? 12.92*c : 1.055*Math.pow(c,1/2.4)-0.055; }
+  function xyzToRgb(xyz){
+    const X=xyz[0]/100, Y=xyz[1]/100, Z=xyz[2]/100;
+    const r = X* 3.2404542 + Y*-1.5371385 + Z*-0.4985314;
+    const g = X*-0.9692660 + Y* 1.8760108 + Z* 0.0415560;
+    const b = X* 0.0556434 + Y*-0.2040259 + Z* 1.0572252;
+    return [r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(linearToSrgb(v)*255))));
+  }
+  function labToRgb(lab){ return xyzToRgb(labToXyz(lab)); }
+
+  // Shadow = darker + slightly cooler/less saturated; Highlight = lighter + slightly warmer/less saturated.
+  // This mirrors the standard "shade/tint" approach modelers use for panel-line shadows and edge highlights.
+  function deriveShadowRgb(baseRgb, amount){
+    const [L,a,b] = rgbToLab(baseRgb);
+    const newLab = [Math.max(4, L-amount), a*0.82, b*0.82 - amount*0.18];
+    return labToRgb(newLab);
+  }
+  function deriveHighlightRgb(baseRgb, amount){
+    const [L,a,b] = rgbToLab(baseRgb);
+    const newLab = [Math.min(96, L+amount), a*0.82, b*0.82 + amount*0.18];
+    return labToRgb(newLab);
+  }
+
+  // ---------- mixbox ----------
+  const MB = window.mixbox;
+  const engineStatus = document.getElementById('engineStatus');
+  if(!MB || typeof MB.rgbToLatent !== 'function'){
+    engineStatus.textContent = '⚠️ 調色引擎載入失敗，請檢查網路連線後重新整理頁面';
+    engineStatus.style.color = 'var(--bad)';
+  }
+
+  function latentOf(paint){
+    if(!paint._latent){ paint._latent = MB.rgbToLatent(rgbCss(hexToRgb(paint.hex))); }
+    return paint._latent;
+  }
+  function mixLatents(chosenPaints, weights){
+    const n = MB.LATENT_SIZE;
+    const z = new Array(n).fill(0);
+    for(let i=0;i<chosenPaints.length;i++){
+      const lat = latentOf(chosenPaints[i]);
+      const w = weights[i];
+      if(w===0) continue;
+      for(let j=0;j<n;j++) z[j]+= lat[j]*w;
+    }
+    return MB.latentToRgb(z);
+  }
+
+  function combinations(arr,k){
+    const result=[];
+    (function rec(start, combo){
+      if(combo.length===k){ result.push(combo.slice()); return; }
+      for(let i=start;i<arr.length;i++){
+        combo.push(arr[i]);
+        rec(i+1, combo);
+        combo.pop();
+      }
+    })(0, []);
+    return result;
+  }
+  function weightGrids(k, step){
+    const steps = Math.round(1/step);
+    const results = [];
+    (function rec(remainingSlots, remainingSum, current){
+      if(remainingSlots===1){ current.push(remainingSum*step); results.push(current.slice()); current.pop(); return; }
+      for(let i=0;i<=remainingSum;i++){
+        current.push(i*step);
+        rec(remainingSlots-1, remainingSum-i, current);
+        current.pop();
+      }
+    })(k, steps, []);
+    return results;
+  }
+
+  function findRecipes(paintList, targetRgb, maxCombo){
+    const targetLab = rgbToLab(targetRgb);
+    const idxAll = paintList.map((_,i)=>i);
+    const bestPerCombo = new Map();
+
+    // k=1: cheap enough to check every paint in the library directly.
+    for(const i of idxAll){
+      const rgbMix = hexToRgb(paintList[i].hex);
+      const de = deltaE(rgbToLab(rgbMix), targetLab);
+      bestPerCombo.set(''+i, {combo:[i], w:[1], de, rgbMix});
+    }
+
+    // k=2/3: combinations explode with a big library (e.g. 161 paints -> 680k+ triples),
+    // so narrow to a shortlist before searching: the paints closest to the target in
+    // Lab space, plus the library's nearest-to-white and nearest-to-black (common tint anchors).
+    if(maxCombo>1){
+      const byDistance = idxAll.slice().sort((a,b)=>{
+        const da = deltaE(rgbToLab(hexToRgb(paintList[a].hex)), targetLab);
+        const db = deltaE(rgbToLab(hexToRgb(paintList[b].hex)), targetLab);
+        return da-db;
+      });
+      const SHORTLIST = 16;
+      const candidateSet = new Set(byDistance.slice(0,SHORTLIST));
+
+      const whiteLab = rgbToLab([255,255,255]), blackLab = rgbToLab([0,0,0]);
+      let nearestWhite=idxAll[0], nearestBlack=idxAll[0], dw0=Infinity, db0=Infinity;
+      idxAll.forEach(i=>{
+        const lab = rgbToLab(hexToRgb(paintList[i].hex));
+        const dw = deltaE(lab, whiteLab), db = deltaE(lab, blackLab);
+        if(dw<dw0){ dw0=dw; nearestWhite=i; }
+        if(db<db0){ db0=db; nearestBlack=i; }
+      });
+      candidateSet.add(nearestWhite);
+      candidateSet.add(nearestBlack);
+      const candidateIdx = Array.from(candidateSet);
+
+      for(let k=2;k<=Math.min(maxCombo, candidateIdx.length);k++){
+        const combos = combinations(candidateIdx,k);
+        const step = k===2 ? 0.05 : 0.1;
+        const grid = weightGrids(k, step);
+        for(const combo of combos){
+          const chosen = combo.map(i=>paintList[i]);
+          let localBest = null;
+          for(const w of grid){
+            const rgbMix = mixLatents(chosen, w);
+            const de = deltaE(rgbToLab(rgbMix), targetLab);
+            if(!localBest || de<localBest.de) localBest = {combo, w, de, rgbMix};
+          }
+          bestPerCombo.set(combo.join(','), localBest);
+        }
+      }
+    }
+
+    let ranked = Array.from(bestPerCombo.values()).sort((a,b)=>a.de-b.de);
+    const top = ranked.slice(0,3).map(r=>{
+      if(r.combo.length===1) return r;
+      const chosen = r.combo.map(i=>paintList[i]);
+      const fineGrid = weightGrids(chosen.length, 0.02);
+      let best = r;
+      for(const w of fineGrid){
+        const rgbMix = mixLatents(chosen, w);
+        const de = deltaE(rgbToLab(rgbMix), targetLab);
+        if(de<best.de) best = {combo:r.combo, w, de, rgbMix};
+      }
+      return best;
+    }).sort((a,b)=>a.de-b.de);
+
+    return top.map(r=>({
+      names: r.combo.map(i=>paintList[i].name),
+      hexes: r.combo.map(i=>paintList[i].hex),
+      weights: r.combo.length===1 ? [1] : normalizeWeights(r.weights || r.w),
+      w: r.w,
+      de: r.de,
+      rgbMix: r.rgbMix
+    }));
+  }
+  function normalizeWeights(w){
+    const sum = w.reduce((a,b)=>a+b,0) || 1;
+    return w.map(x=>x/sum);
+  }
+
+  // ---------- DOM: paint panel ----------
+  const paintCanvas = document.getElementById('paintCanvas');
+  const paintCanvasWrap = document.getElementById('paintCanvasWrap');
+  const paintImgInput = document.getElementById('paintImgInput');
+  const paintStageSwatch = document.getElementById('paintStageSwatch');
+  const paintStageHex = document.getElementById('paintStageHex');
+  const paintColorInput = document.getElementById('paintColorInput');
+  const paintNameInput = document.getElementById('paintNameInput');
+  const addPaintBtn = document.getElementById('addPaintBtn');
+  const paintList = document.getElementById('paintList');
+  const paintCount = document.getElementById('paintCount');
+  const paintEmptyNote = document.getElementById('paintEmptyNote');
+  const clearDemoPaintsBtn = document.getElementById('clearDemoPaintsBtn');
+
+  let stagedPaintHex = '#CCCCCC';
+  function setStagedPaintColor(hex){
+    stagedPaintHex = hex.toUpperCase();
+    paintStageSwatch.style.background = stagedPaintHex;
+    paintStageHex.textContent = stagedPaintHex;
+    paintColorInput.value = stagedPaintHex;
+  }
+
+  function loadImageToCanvas(file, canvas, wrapEl, cb){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      const img = new Image();
+      img.onload = function(){
+        const maxW = 1000;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if(w>maxW){ h = Math.round(h*maxW/w); w = maxW; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        wrapEl.hidden = false;
+        if(cb) cb();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  function pixelColorAt(canvas, evt){
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width/rect.width, scaleY = canvas.height/rect.height;
+    const x = Math.min(canvas.width-1, Math.max(0, Math.floor((evt.clientX-rect.left)*scaleX)));
+    const y = Math.min(canvas.height-1, Math.max(0, Math.floor((evt.clientY-rect.top)*scaleY)));
+    const d = canvas.getContext('2d').getImageData(x,y,1,1).data;
+    return [d[0],d[1],d[2]];
+  }
+
+  paintImgInput.addEventListener('change', function(){
+    const f = paintImgInput.files[0];
+    if(f) loadImageToCanvas(f, paintCanvas, paintCanvasWrap);
+  });
+  paintCanvas.addEventListener('click', function(evt){
+    const rgb = pixelColorAt(paintCanvas, evt);
+    setStagedPaintColor(rgbToHex(rgb));
+  });
+  paintColorInput.addEventListener('input', function(){ setStagedPaintColor(paintColorInput.value); });
+
+  addPaintBtn.addEventListener('click', function(){
+    const name = paintNameInput.value.trim();
+    if(!name){ paintNameInput.focus(); return; }
+    paints.push({id:'p'+Date.now()+Math.random().toString(16).slice(2), name, hex: stagedPaintHex});
+    paintNameInput.value = '';
+    persistAndRenderPaints();
+  });
+  clearDemoPaintsBtn.addEventListener('click', function(){
+    paints = []; persistAndRenderPaints();
+  });
+
+  function persistAndRenderPaints(){
+    saveJSON('paintmix_paints_v2', paints);
+    renderPaints();
+  }
+  function renderPaints(){
+    paintList.innerHTML = '';
+    paintCount.textContent = paints.length;
+    paintEmptyNote.hidden = paints.length>0;
+    clearDemoPaintsBtn.hidden = paints.length===0;
+    paints.forEach(function(p){
+      const row = document.createElement('div');
+      row.className = 'row-item';
+      row.innerHTML =
+        '<div class="swatch" style="background:'+p.hex+'"></div>'+
+        '<span class="name">'+escapeHtml(p.name)+'</span>'+
+        '<code class="hexcode">'+p.hex+'</code>'+
+        '<button class="ghost" data-id="'+p.id+'" title="刪除">✕</button>';
+      row.querySelector('button').addEventListener('click', function(){
+        paints = paints.filter(x=>x.id!==p.id);
+        persistAndRenderPaints();
+      });
+      paintList.appendChild(row);
+    });
+  }
+
+  // ---------- DOM: target panel ----------
+  const targetCanvas = document.getElementById('targetCanvas');
+  const targetCanvasWrap = document.getElementById('targetCanvasWrap');
+  const targetImgInput = document.getElementById('targetImgInput');
+  const hoverSwatch = document.getElementById('hoverSwatch');
+  const hoverHex = document.getElementById('hoverHex');
+  const targetColorInput = document.getElementById('targetColorInput');
+  const targetHexInput = document.getElementById('targetHexInput');
+  const addTargetHexBtn = document.getElementById('addTargetHexBtn');
+  const targetListEl = document.getElementById('targetList');
+  const targetCount = document.getElementById('targetCount');
+  const targetEmptyNote = document.getElementById('targetEmptyNote');
+  const clearDemoTargetsBtn = document.getElementById('clearDemoTargetsBtn');
+
+  targetImgInput.addEventListener('change', function(){
+    const f = targetImgInput.files[0];
+    if(f) loadImageToCanvas(f, targetCanvas, targetCanvasWrap);
+  });
+  targetCanvas.addEventListener('mousemove', function(evt){
+    const rgb = pixelColorAt(targetCanvas, evt);
+    const hex = rgbToHex(rgb);
+    hoverSwatch.style.background = hex;
+    hoverHex.textContent = hex;
+  });
+  targetCanvas.addEventListener('click', function(evt){
+    const rgb = pixelColorAt(targetCanvas, evt);
+    addTarget(rgbToHex(rgb));
+  });
+  targetColorInput.addEventListener('input', function(){
+    targetHexInput.value = targetColorInput.value.toUpperCase();
+  });
+  addTargetHexBtn.addEventListener('click', function(){
+    let hex = targetHexInput.value.trim();
+    if(!/^#?[0-9a-fA-F]{6}$/.test(hex)) return;
+    if(hex[0]!=='#') hex = '#'+hex;
+    addTarget(hex.toUpperCase());
+  });
+
+  function addTarget(hex){
+    if(targetsAreDemo){ targets = []; targetsAreDemo = false; }
+    const id = 't'+Date.now()+Math.random().toString(16).slice(2);
+    targets.push({id, hex, label:'色塊 '+(targets.length+1)});
+    persistAndRenderTargets();
+  }
+  clearDemoTargetsBtn.addEventListener('click', function(){
+    targets = []; targetsAreDemo = false; activeTargetId = null;
+    persistAndRenderTargets();
+    renderResultEmpty();
+  });
+
+  function persistAndRenderTargets(){
+    saveJSON('paintmix_targets_v1', targets);
+    renderTargets();
+  }
+  function renderTargets(){
+    targetListEl.innerHTML = '';
+    targetCount.textContent = targets.length;
+    targetEmptyNote.hidden = targets.length>0;
+    clearDemoTargetsBtn.hidden = !targetsAreDemo || targets.length===0;
+    targets.forEach(function(t){
+      const row = document.createElement('div');
+      row.className = 'row-item' + (t.id===activeTargetId ? ' active' : '');
+      row.innerHTML =
+        '<div class="swatch" style="background:'+t.hex+'"></div>'+
+        '<input type="text" class="label-input" value="'+escapeAttr(t.label)+'">'+
+        (t.demo ? '<span class="demo-tag">範例</span>' : '') +
+        '<code class="hexcode">'+t.hex+'</code>'+
+        '<button data-act="calc">計算配方</button>'+
+        '<button class="ghost" data-act="del" title="刪除">✕</button>';
+      row.querySelector('.label-input').addEventListener('change', function(e){
+        t.label = e.target.value; saveJSON('paintmix_targets_v1', targets);
+      });
+      row.querySelector('[data-act="calc"]').addEventListener('click', function(){
+        activeTargetId = t.id;
+        renderTargets();
+        computeAndShow(t);
+      });
+      row.querySelector('[data-act="del"]').addEventListener('click', function(){
+        targets = targets.filter(x=>x.id!==t.id);
+        if(targets.length===0) targetsAreDemo = false;
+        if(activeTargetId===t.id){ activeTargetId=null; renderResultEmpty(); }
+        persistAndRenderTargets();
+      });
+      targetListEl.appendChild(row);
+    });
+  }
+
+  // ---------- result rendering ----------
+  const resultArea = document.getElementById('resultArea');
+  const maxKSelect = document.getElementById('maxKSelect');
+  const shadeStrengthSelect = document.getElementById('shadeStrengthSelect');
+  let shadeStrength = parseInt(shadeStrengthSelect.value,10);
+  maxKSelect.addEventListener('change', function(){
+    maxK = parseInt(maxKSelect.value,10);
+    if(activeTargetId){ const t=targets.find(x=>x.id===activeTargetId); if(t) computeAndShow(t); }
+  });
+  shadeStrengthSelect.addEventListener('change', function(){
+    shadeStrength = parseInt(shadeStrengthSelect.value,10);
+    if(activeTargetId){ const t=targets.find(x=>x.id===activeTargetId); if(t) computeAndShow(t); }
+  });
+
+  function renderResultEmpty(){
+    resultArea.innerHTML = '<div class="empty-note">在上方目標清單點「計算配方」查看結果。</div>';
+  }
+
+  function deClass(de){
+    if(de<=3) return {cls:'de-good', label:'非常接近'};
+    if(de<=8) return {cls:'de-warn', label:'接近，建議微調'};
+    return {cls:'de-bad', label:'誤差較大'};
+  }
+
+  function computeAndShow(target){
+    if(!MB || typeof MB.rgbToLatent !== 'function'){
+      resultArea.innerHTML = '<div class="empty-note">調色引擎尚未就緒，請重新整理頁面。</div>';
+      return;
+    }
+    if(paints.length===0){
+      resultArea.innerHTML = '<div class="empty-note">請先在「顏料庫」加入至少一種顏料。</div>';
+      return;
+    }
+    resultArea.innerHTML = '<div class="empty-note">計算中…</div>';
+    setTimeout(function(){
+      const targetRgb = hexToRgb(target.hex);
+      const recipes = findRecipes(paints, targetRgb, maxK);
+
+      const shadowRgb = deriveShadowRgb(targetRgb, shadeStrength);
+      const highlightRgb = deriveHighlightRgb(targetRgb, shadeStrength);
+      const shadowRecipes = findRecipes(paints, shadowRgb, maxK);
+      const highlightRecipes = findRecipes(paints, highlightRgb, maxK);
+
+      renderRecipes(target, recipes, {
+        shadow: {hex: rgbToHex(shadowRgb), recipe: shadowRecipes[0]},
+        highlight: {hex: rgbToHex(highlightRgb), recipe: highlightRecipes[0]}
+      });
+    }, 10);
+  }
+
+  function recipeIngredientsHtml(recipe){
+    return recipe.names.map(function(name,i){
+      const pct = Math.round(recipe.weights[i]*100);
+      const hex = recipe.hexes[i];
+      return '<div class="ingredient"><span class="dot" style="background:'+hex+'"></span>'+
+        '<span>'+escapeHtml(name)+'</span><span class="pct">'+pct+'%</span></div>';
+    }).join('');
+  }
+  function barHtml(recipe){
+    return '<div class="bar">'+recipe.names.map(function(name,i){
+      const pct = (recipe.weights[i]*100).toFixed(1);
+      return '<span style="width:'+pct+'%;background:'+recipe.hexes[i]+'"></span>';
+    }).join('')+'</div>';
+  }
+
+  function shadeCardHtml(kind, label, icon, hex, recipe){
+    let html = '<div class="shade-card '+kind+'">';
+    html += '<div class="shade-head">';
+    html += '<div class="swatch" style="background:'+hex+'"></div>';
+    html += '<div><div class="shade-title">'+icon+' '+label+'</div><code class="hexcode">'+hex+'</code></div>';
+    html += '</div>';
+    if(recipe){
+      html += barHtml(recipe);
+      html += '<div style="display:flex;flex-direction:column;gap:5px;">'+recipeIngredientsHtml(recipe)+'</div>';
+    }else{
+      html += '<div class="empty-note">找不到可用配方。</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderRecipes(target, recipes, shades){
+    if(!recipes.length){
+      resultArea.innerHTML = '<div class="empty-note">找不到可用配方。</div>';
+      return;
+    }
+    const main = recipes[0];
+    const dc = deClass(main.de);
+    const mixHex = rgbToHex(main.rgbMix);
+
+    let html = '<div class="result-card">';
+    html += '<div class="result-top">';
+    html += '<div class="versus">';
+    html += '<figure><div class="swatch lg" style="background:'+target.hex+'"></div><figcaption>目標（主色）<br>'+target.hex+'</figcaption></figure>';
+    html += '<div class="arrow">→</div>';
+    html += '<figure><div class="swatch lg" style="background:'+mixHex+'"></div><figcaption>調色結果<br>'+mixHex+'</figcaption></figure>';
+    html += '</div>';
+    html += '<div class="de-badge '+dc.cls+'">ΔE '+main.de.toFixed(1)+'<small>'+dc.label+'</small></div>';
+    html += '</div>';
+
+    html += barHtml(main);
+    html += '<div style="display:flex;flex-direction:column;gap:6px;">'+recipeIngredientsHtml(main)+'</div>';
+
+    if(recipes.length>1){
+      html += '<div class="section-label">其他配方選項</div>';
+      html += '<div class="alt-grid">';
+      recipes.slice(1).forEach(function(r){
+        const rd = deClass(r.de);
+        html += '<div class="alt-card">';
+        html += '<div class="alt-head"><span>ΔE '+r.de.toFixed(1)+' · '+rd.label+'</span>'+barHtml(r)+'</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:5px;">'+recipeIngredientsHtml(r)+'</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    if(shades){
+      html += '<div class="section-label" style="margin-top:6px;">陰影／高光建議（以主色推算，供暗部與邊緣高光使用）</div>';
+      html += '<div class="shade-grid">';
+      html += shadeCardHtml('shadow', '陰影色', '🌑', shades.shadow.hex, shades.shadow.recipe);
+      html += shadeCardHtml('highlight', '高光色', '🔆', shades.highlight.hex, shades.highlight.recipe);
+      html += '</div>';
+    }
+
+    resultArea.innerHTML = html;
+  }
+
+  // ---------- utils ----------
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  // ---------- init ----------
+  renderPaints();
+  renderTargets();
+  setStagedPaintColor('#CCCCCC');
+})();
+</script>
+</body>
+</html>
